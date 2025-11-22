@@ -1,0 +1,28 @@
+node_modules
+.turbo
+
+# OS
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+lerna-debug.log*
+
+# Env files
+.env.local
+.env.*.local
+
+# Build outputs (monorepo)
+**/dist
+**/.next
+**/out
+**/build
+**/coverage
+**/.nyc_output
+
+# Vercel (web)
+apps/web/.vercel

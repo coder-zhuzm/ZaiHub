@@ -1,0 +1,22 @@
+{
+  "name": "ZaiHub",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "db:push": "turbo run db:push",
+    "start:api": "pnpm -C apps/api start",
+    "start:web": "pnpm -C apps/web dev",
+    "start:all": "pnpm dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.23.0",
+  "devDependencies": {
+    "turbo": "^2.6.1",
+    "typescript": "^5.9.3"
+  }
+}
