@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![ZaiHub Logo](https://via.placeholder.com/150x50/1f2937/ffffff?text=ZaiHub)
+# ZaiHub
 
 **多窗口AI聊天平台** - 支持多模型并行对话的智能聊天应用
 
