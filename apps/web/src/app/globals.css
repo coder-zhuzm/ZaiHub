@@ -163,6 +163,262 @@ html, body, #__next {
   --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
+/* 代码高亮样式 - GitHub Dark 主题 */
+.hljs {
+  background: #0d1117 !important;
+  color: #c9d1d9 !important;
+  padding: 0.5rem !important;
+  border-radius: 0.25rem !important;
+  font-size: 0.75rem !important;
+  line-height: 1.4 !important;
+}
+
+/* 语法高亮颜色 */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: #ff7b72 !important;
+}
+
+.hljs-string {
+  color: #a5d6ff !important;
+}
+
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-type {
+  color: #79c0ff !important;
+}
+
+.hljs-comment {
+  color: #8b949e !important;
+  font-style: italic;
+}
+
+.hljs-function .hljs-title {
+  color: #d2a8ff !important;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable {
+  color: #ffa657 !important;
+}
+
+.hljs-tag {
+  color: #7ee787 !important;
+}
+
+.hljs-class .hljs-title {
+  color: #d2a8ff !important;
+}
+
+.hljs-meta {
+  color: #8b949e !important;
+}
+
+.hljs-strong {
+  font-weight: bold !important;
+  color: #c9d1d9 !important;
+}
+
+.hljs-emphasis {
+  font-style: italic !important;
+}
+
+.hljs-params {
+  color: #c9d1d9 !important;
+}
+
+.hljs-property {
+  color: #79c0ff !important;
+}
+
+.hljs-punctuation {
+  color: #c9d1d9 !important;
+}
+
+.hljs-subst {
+  color: #c9d1d9 !important;
+}
+
+.hljs-symbol {
+  color: #ffa657 !important;
+}
+
+.hljs-bullet {
+  color: #f2cc60 !important;
+}
+
+.hljs-code {
+  color: #a5d6ff !important;
+}
+
+.hljs-regexp {
+  color: #a5d6ff !important;
+}
+
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: #ffa657 !important;
+}
+
+.hljs-selector-class {
+  color: #ffa657 !important;
+}
+
+.hljs-selector-id {
+  color: #d2a8ff !important;
+}
+
+.hljs-quote {
+  color: #8b949e !important;
+}
+
+.hljs-operator {
+  color: #ff7b72 !important;
+}
+
+.hljs-deletion {
+  background: #ffeef0 !important;
+  color: #ff7b72 !important;
+}
+
+.hljs-addition {
+  background: #f0fff4 !important;
+  color: #7ee787 !important;
+}
+
+/* Markdown 样式优化 */
+.prose {
+  color: #374151;
+  line-height: 1.6;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: #111827;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.prose code {
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+/* 确保行内代码不被prose样式覆盖 */
+.prose code:not(pre code) {
+  background-color: #fef2f2 !important;
+  color: #991b1b !important;
+  font-weight: 600 !important;
+  padding: 0.125rem 0.25rem !important;
+  border-radius: 0.25rem !important;
+  font-size: 0.75em !important;
+  display: inline !important;
+  white-space: nowrap !important;
+}
+
+/* 确保not-prose类的行内代码样式 */
+.not-prose code {
+  background-color: #fef2f2 !important;
+  color: #991b1b !important;
+  font-weight: 600 !important;
+  padding: 0.125rem 0.25rem !important;
+  border-radius: 0.25rem !important;
+  font-size: 0.75em !important;
+  display: inline !important;
+  white-space: nowrap !important;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace !important;
+}
+
+/* 防止代码块被误认为是行内代码 */
+.prose pre code {
+  display: block !important;
+  white-space: pre !important;
+  background-color: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+}
+
+.prose pre {
+  background-color: #1f2937;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.prose pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #f3f4f6;
+}
+
+.prose blockquote {
+  border-left: 4px solid #d1d5db;
+  padding-left: 1rem;
+  font-style: italic;
+  color: #6b7280;
+}
+
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid #d1d5db;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.prose a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: #1d4ed8;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.5rem;
+}
+
+.prose li {
+  margin: 0.25rem 0;
+}
+
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid #d1d5db;
+  margin: 2rem 0;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

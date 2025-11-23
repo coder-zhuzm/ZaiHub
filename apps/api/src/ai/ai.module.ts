@@ -8,9 +8,13 @@
 import { Module } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { PassportModule } from '@nestjs/passport';
+import { PrismaService } from '../prisma/prisma.service';
+import { AiService } from './ai.service';
 
 @Module({
   imports: [PassportModule],
   controllers: [AiController],
+  providers: [PrismaService, AiService],
+  exports: [AiService],
 })
 export class AiModule {}

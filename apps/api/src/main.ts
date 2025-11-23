@@ -1,22 +1,18 @@
+/*
+ * @Description: 
+ * @Author: zhuzm
+ * @Date: 2025-11-22 16:58:32
+ * @LastEditors: zhuzm
+ * @LastEditTime: 2025-11-23 17:49:35
+ */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({ origin: true });
-  let port = Number(process.env.PORT) || 8000;
-  while (true) {
-    try {
-      await app.listen(port);
-      console.log(`API listening on port ${port}`);
-      break;
-    } catch (e: any) {
-      if (e && e.code === 'EADDRINUSE') {
-        port += 1;
-        continue;
-      }
-      throw e;
-    }
-  }
+  const port = Number(process.env.PORT) || 8000;
+  await app.listen(port);
+  console.log(`API listening on port ${port}`);
 }
 void bootstrap();
