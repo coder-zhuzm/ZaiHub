@@ -9,6 +9,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const apiPort = process.env.API_PORT ?? '8000';
 const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname, '..', '..'),
@@ -17,7 +18,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/:path*',
+        destination: `http://localhost:${apiPort}/:path*`,
       },
     ];
   },

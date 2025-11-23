@@ -4,6 +4,11 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
 import { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -25,15 +30,15 @@ export default function Home() {
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: 'http://localhost:8000/ai/chat',
+      api: '/api/ai/chat',
       prepareSendMessagesRequest: () => ({
         headers: {
           'Content-Type': 'application/json',
           ...(typeof window !== 'undefined'
             ? (() => {
-                const t = token || localStorage.getItem('token');
-                return t ? { Authorization: `Bearer ${t}` } : {};
-              })()
+              const t = token || localStorage.getItem('token');
+              return t ? { Authorization: `Bearer ${t}` } : {};
+            })()
             : {}),
         },
       }),
@@ -73,7 +78,8 @@ export default function Home() {
           setShowAuth(false);
         }
       } else {
-        alert('认证失败');
+        const data = await res.json();
+        alert(data.message || '认证失败');
       }
     } catch {
       alert('网络错误');
@@ -83,53 +89,51 @@ export default function Home() {
   if (showAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold text-center mb-6">
-            {isLogin ? '登录 ZaiHub' : '注册 ZaiHub'}
-          </h2>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <input
-              type="email"
-              placeholder="邮箱"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-            <input
-              type="password"
-              placeholder="密码"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-            {!isLogin && (
-              <input
-                type="text"
-                placeholder="昵称（可选）"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">
+              {isLogin ? '登录 ZaiHub' : '注册 ZaiHub'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAuth} className="space-y-4">
+              <Input
+                type="email"
+                placeholder="邮箱"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
-            )}
-            <button
-              type="submit"
-              className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-            >
-              {isLogin ? '登录' : '注册'}
-            </button>
-          </form>
-          <p className="text-center mt-4">
-            {isLogin ? '没有账号？' : '已有账号？'}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="ml-1 text-blue-500 hover:underline"
-            >
-              {isLogin ? '注册' : '登录'}
-            </button>
-          </p>
-        </div>
+              <Input
+                type="password"
+                placeholder="密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              {!isLogin && (
+                <Input
+                  type="text"
+                  placeholder="昵称（可选）"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                />
+              )}
+              <Button type="submit" className="w-full">
+                {isLogin ? '登录' : '注册'}
+              </Button>
+            </form>
+            <p className="text-center mt-4">
+              {isLogin ? '没有账号？' : '已有账号？'}
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="ml-1 text-blue-500 hover:underline"
+              >
+                {isLogin ? '注册' : '登录'}
+              </button>
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -152,31 +156,38 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 overflow-hidden flex flex-col">
-        <div ref={listRef} className="flex-1 overflow-y-auto mb-4 space-y-4">
-          {messages.map((message: UIMessage) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 overflow-hidden flex flex-col min-h-0">
+        <ScrollArea viewportRef={listRef} className="flex-1 mb-4 min-h-0">
+          <div className="space-y-4">
+            {messages.map((message: UIMessage) => (
               <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.role === 'user'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white text-gray-800 border'
-                  }`}
+                key={message.id}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('')}
+                <div className={`flex items-start gap-2 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <Avatar>
+                    <AvatarFallback>{message.role === 'user' ? 'U' : 'AI'}</AvatarFallback>
+                  </Avatar>
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.role === 'user'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-800 border'
+                      }`}
+                  >
+                    {message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('')}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-          {(status === 'submitted' || status === 'streaming') && (
-            <div className="flex justify-start">
-              <div className="bg-white text-gray-800 border px-4 py-2 rounded-lg">
-                正在思考...
+            ))}
+            {(status === 'submitted' || status === 'streaming') && (
+              <div className="flex justify-start">
+                <div className="bg-white text-gray-800 border px-4 py-2 rounded-lg">
+                  正在思考...
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </ScrollArea>
 
         <form
           onSubmit={(e) => {
@@ -188,20 +199,20 @@ export default function Home() {
           }}
           className="flex gap-2"
         >
-          <input
+          <Input
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             placeholder="输入消息..."
-            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1"
             disabled={status !== 'ready'}
           />
-          <button
+          <Button
             type="submit"
             disabled={status !== 'ready'}
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 transition"
+            className="px-6"
           >
             发送
-          </button>
+          </Button>
         </form>
       </main>
     </div>
