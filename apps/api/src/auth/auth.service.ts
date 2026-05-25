@@ -13,16 +13,6 @@ import * as bcrypt from "bcryptjs";
 @Injectable()
 export class AuthService {
   constructor(private jwt: JwtService, private prismaService: PrismaService) {}
-  private memoryUsers = new Map<
-    string,
-    {
-      id: string;
-      email: string;
-      password: string;
-      nickname?: string;
-      role: string;
-    }
-  >();
 
   async validateUser(email: string, pass: string) {
     const user = await this.prismaService.client.user.findUnique({ where: { email } });

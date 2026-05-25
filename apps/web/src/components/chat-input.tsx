@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -16,6 +17,20 @@ export default function ChatInput({
   selectedModelsCount,
   disabled = false
 }: ChatInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 页面加载后聚焦
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // 可用状态恢复时聚焦（输出完成、重试完成）
+  useEffect(() => {
+    if (!disabled && selectedModelsCount > 0) {
+      inputRef.current?.focus();
+    }
+  }, [disabled, selectedModelsCount]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (value.trim() && selectedModelsCount > 0) {
@@ -28,6 +43,7 @@ export default function ChatInput({
       <div className="max-w-7xl mx-auto">
         <form onSubmit={handleSubmit} className="flex gap-3">
           <Input
+            ref={inputRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={

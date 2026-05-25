@@ -13,13 +13,13 @@ import OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
-  private readonly modelCache = new Map<string, { 
-    modelName?: string; 
-    base?: string; 
-    key?: string; 
-    platform?: string; 
+  private readonly modelCache = new Map<string, {
+    modelName?: string;
+    base?: string;
+    key?: string;
+    platform?: string;
     provider: any;
-    expires: number 
+    expires: number
   }>();
   private readonly MODEL_TTL_MS = 60_000;
 
@@ -31,16 +31,15 @@ export class AiService {
   ) {
     let { base, key, modelName, platform } = defaults;
     let provider: any = null;
-    
+
     if (!modelId) {
-      // Create provider for defaults
       provider = createOpenAI({
         baseURL: base,
         apiKey: key,
       });
       return { base, key, modelName, platform, provider };
     }
-    
+
     const now = Date.now();
     const cached = this.modelCache.get(modelId);
     if (cached && cached.expires > now) {
@@ -60,14 +59,15 @@ export class AiService {
         if (model.apiKey) key = model.apiKey;
         if ((model as any).platform) platform = (model as any).platform;
       }
-    } catch {}
-    
-    // 创建provider
+    } catch (err) {
+      console.error('Failed to resolve model config:', err);
+    }
+
     provider = createOpenAI({
       baseURL: base,
       apiKey: key,
     });
-    
+
     if (modelId) {
       this.modelCache.set(modelId, {
         modelName,
@@ -78,7 +78,7 @@ export class AiService {
         expires: now + this.MODEL_TTL_MS,
       });
     }
-    
+
     return { base, key, modelName, platform, provider };
   }
 
@@ -86,40 +86,34 @@ export class AiService {
     messages: Array<{ role: string; content: string }>,
     modelId: string | undefined
   ) {
-    console.log('[AI Service] Starting stream chat with modelId:', modelId);
     const defaults = {
       base: process.env.IFLOW_BASE_URL ?? "https://apis.iflow.cn/v1",
       key: process.env.IFLOW_API_KEY ?? "",
       modelName: "qwen3-max",
       platform: "openai",
     };
-    
+
     const { modelName, base, key } = await this.resolveModelConfig(modelId, defaults);
-    console.log('[AI Service] Resolved model:', modelName);
-    
+
     if (!modelName || !base || !key) {
       throw new Error("Model configuration not found");
     }
 
-    // 直接使用 OpenAI 客户端
-    console.log('[AI Service] Creating OpenAI client');
     const openai = new OpenAI({
       baseURL: base,
       apiKey: key,
     });
-    
-    console.log('[AI Service] Starting stream at', new Date().toISOString());
+
     const stream = await openai.chat.completions.create({
       model: modelName,
       messages: messages as any,
       stream: true,
-      max_tokens: 256,
+      max_tokens: parseInt(process.env.AI_MAX_TOKENS ?? "4096"),
       temperature: 0.3,
       top_p: 0.8,
       frequency_penalty: 0.3,
       presence_penalty: 0.3,
     });
-    console.log('[AI Service] Got stream - returning immediately for real-time processing');
 
     return stream;
   }

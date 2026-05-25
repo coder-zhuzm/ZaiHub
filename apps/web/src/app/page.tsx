@@ -151,46 +151,23 @@ export default function Home() {
     const session = chatSessions[modelId];
     if (!session || session.messages.length === 0) return;
 
+    const filteredMessages = session.messages.filter(m =>
+      !(m.role === 'assistant' && m.parts.some(p =>
+        p.type === 'text' && (p.text.includes('连接失败') || p.text.includes('AI服务暂时不可用'))
+      ))
+    );
+
+    const lastUserMessage = [...filteredMessages].reverse().find(m => m.role === 'user');
+    if (!lastUserMessage) return;
+
     setIsSending(true);
+    setChatSessions(prev => ({
+      ...prev,
+      [modelId]: { ...prev[modelId], messages: filteredMessages, status: 'loading' }
+    }));
 
-    // 先移除错误消息和正在加载的状态
-    setChatSessions(prev => {
-      const messages = prev[modelId]?.messages || [];
-      // 移除最后一条错误消息
-      const filteredMessages = messages.filter(m =>
-        !(m.role === 'assistant' && m.parts.some(p =>
-          p.type === 'text' && (p.text.includes('连接失败') || p.text.includes('AI服务暂时不可用'))
-        ))
-      );
-      return {
-        ...prev,
-        [modelId]: {
-          ...prev[modelId],
-          messages: filteredMessages,
-          status: 'loading'
-        }
-      };
-    });
-
-    // 等待状态更新后获取最新的消息列表
-    setTimeout(async () => {
-      const updatedSession = chatSessions[modelId];
-      if (!updatedSession || updatedSession.messages.length === 0) {
-        setIsSending(false);
-        return;
-      }
-
-      // 获取最后一条用户消息
-      const lastUserMessage = [...updatedSession.messages].reverse().find(m => m.role === 'user');
-      if (!lastUserMessage) {
-        setIsSending(false);
-        return;
-      }
-
-      // 重发最后一条用户消息（不添加到历史，因为已经存在）
-      await sendMessageForModel(lastUserMessage, modelId, false);
-      setIsSending(false);
-    }, 100);
+    await sendMessageForModel(lastUserMessage, modelId, false);
+    setIsSending(false);
   };
 
   const sendMessageForModel = async (userMessage: UIMessage, modelId: string, addToHistory = true) => {
@@ -227,18 +204,10 @@ export default function Home() {
       const isDataStream = response.headers.get('x-vercel-ai-data-stream') === 'v1';
       const isStream = contentType.includes('text/event-stream') || isDataStream;
       
-      console.log('[Frontend] Response headers:', {
-        contentType,
-        isDataStream,
-        isStream,
-        status: response.status
-      });
-      
       if (isStream && response.body) {
         const messageId = `ai-${Date.now()}-${modelId}`;
         const decoder = new TextDecoder();
         let fullText = '';
-        let buffer = '';
 
         // 流开始时创建空消息
         setChatSessions(prev => ({
@@ -258,10 +227,10 @@ export default function Home() {
           if (done) break;
           
           const chunk = decoder.decode(value, { stream: true });
-          console.log('[Frontend] Raw chunk:', chunk);
-          buffer += chunk;
-          const events = buffer.split('\n\n');
-          buffer = events.pop() || '';
+          
+          // 按空行分割SSE事件，确保每个完整事件单独处理
+          const events = chunk.split('\n\n').filter(event => event.trim());
+          
           for (const event of events) {
             const lines = event.split('\n');
             
@@ -277,26 +246,29 @@ export default function Home() {
                     
                     if (data.type === 'text' && data.content) {
                       fullText += data.content;
-                      console.log('[Frontend] Received text chunk:', data.content, 'Full text length:', fullText.length);
                       
-                      setChatSessions(prev => {
-                        const messages = prev[modelId]?.messages || [];
-                        const updatedMessages = messages.map(m => 
-                          m.id === messageId 
-                            ? { ...m, parts: [{ type: 'text', text: fullText }] }
-                            : m
-                        );
-                        return {
-                          ...prev,
-                          [modelId]: {
-                            ...prev[modelId],
-                            messages: updatedMessages as UIMessage[],
-                            status: 'streaming'
-                          }
-                        };
+                      // 立即更新消息内容，确保实时渲染
+                      flushSync(() => {
+                        setChatSessions(prev => {
+                          const messages = prev[modelId]?.messages || [];
+                          const updatedMessages = messages.map(m => 
+                            m.id === messageId 
+                              ? { ...m, parts: [{ type: 'text', text: fullText }] }
+                              : m
+                          );
+                          
+                          return {
+                            ...prev,
+                            [modelId]: {
+                              ...prev[modelId],
+                              messages: updatedMessages as UIMessage[],
+                              status: 'streaming'
+                            }
+                          };
+                        });
                       });
                     } else if (data.type === 'done') {
-                      console.log('[Frontend] Stream ended, final text length:', fullText.length);
+                      // stream ended
                     }
                 }
               }
@@ -390,17 +362,6 @@ export default function Home() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!token) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -454,7 +415,6 @@ export default function Home() {
                   <ChatWindow
                     key={windowIndex}
                     windowIndex={windowIndex}
-                    modelId={modelId}
                     model={model}
                     session={session}
                     isActive={true}

@@ -22,7 +22,6 @@ interface ChatSession {
 
 interface ChatWindowProps {
   windowIndex: number;
-  modelId: string;
   model: Model | null;
   session: ChatSession | null;
   isActive: boolean;
@@ -33,7 +32,6 @@ interface ChatWindowProps {
 
 export default function ChatWindow({
   windowIndex,
-  modelId,
   model,
   session,
   isActive,
@@ -41,7 +39,6 @@ export default function ChatWindow({
   onModelSelect,
   onRetry
 }: ChatWindowProps) {
-  console.log('ChatWindow', modelId);
   return (
     <Card className={cn(
       "flex flex-col h-full min-h-0 transition-all duration-300",
@@ -92,7 +89,13 @@ export default function ChatWindow({
                     开始与 {model.name} 对话吧！
                   </div>
                 ) : (
-                  session.messages.map((message: UIMessage) => (
+                  session.messages.map((message: UIMessage) => {
+                    const content = message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('');
+                    const isLastMessage = session.messages[session.messages.length - 1].id === message.id;
+                    const isStreaming = session.status === 'streaming' && isLastMessage;
+                    // 流式消息内容为空时不渲染，由"正在回复..."气泡代替
+                    if (isStreaming && !content) return null;
+                    return (
                     <div
                       key={message.id}
                       className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -112,38 +115,26 @@ export default function ChatWindow({
                           )}
                         >
                           {message.role === 'user' ? (
-                            message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('')
+                            content
                           ) : (
-                            (() => {
-                              const isLastMessage = session?.messages.length > 0 &&
-                                session.messages[session.messages.length - 1].id === message.id;
-                              const isStreaming = session?.status === 'streaming' && isLastMessage;
-                              const content = message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('');
-                              
-                              // 如果是流式消息，使用 StreamingText 组件
-                              if (isStreaming) {
-                                return (
-                                  <StreamingText
-                                    text={content}
-                                    isStreaming={true}
-                                    className="text-xs"
-                                  />
-                                );
-                              }
-                              
-                              // 否则使用 EnhancedMarkdown
-                              return (
-                                <EnhancedMarkdown
-                                  content={content}
-                                  className="text-xs"
-                                />
-                              );
-                            })()
+                            isStreaming ? (
+                              <StreamingText
+                                text={content}
+                                isStreaming={true}
+                                className="text-xs"
+                              />
+                            ) : (
+                              <EnhancedMarkdown
+                                content={content}
+                                className="text-xs"
+                              />
+                            )
                           )}
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
 
                 {session.status === 'loading' && (
