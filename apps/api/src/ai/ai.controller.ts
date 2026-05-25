@@ -1,10 +1,3 @@
-/*
- * @Description:
- * @Author: zhuzm
- * @Date: 2025-11-22 20:47:03
- * @LastEditors: zhuzm
- * @LastEditTime: 2025-11-23 23:22:29
- */
 import { Controller, Post, Body, UseGuards, Res, Req } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { Response } from "express";
@@ -19,7 +12,7 @@ export class AiController {
   private readonly MAX_PER_MINUTE = 30;
 
   @Post("chat")
-  // @UseGuards(AuthGuard("jwt"))  // 临时禁用认证进行测试
+  @UseGuards(AuthGuard("jwt"))
   async chat(
     @Body() body: { messages: any[]; modelId?: string },
     @Res() res: Response,
@@ -29,7 +22,6 @@ export class AiController {
     const userId = req?.user?.userId ?? "anonymous";
     const now = Date.now();
 
-    // 速率限制检查
     const recent = (this.requestLog.get(userId) ?? []).filter(
       (t) => now - t < 60_000
     );
@@ -40,15 +32,14 @@ export class AiController {
     recent.push(now);
     this.requestLog.set(userId, recent);
 
-    // 并发限制检查
-    const current = (this.activeCounts.get(userId) ?? 0) + 1;
-    if (current > this.MAX_CONCURRENT) {
+    const existing = this.activeCounts.get(userId) ?? 0;
+    if (existing >= this.MAX_CONCURRENT) {
       res
         .status(429)
         .json({ error: "concurrency_limited: too many in-flight requests" });
       return;
     }
-    this.activeCounts.set(userId, current);
+    this.activeCounts.set(userId, existing + 1);
 
     const decrement = () => {
       const v = this.activeCounts.get(userId) ?? 1;
@@ -56,7 +47,6 @@ export class AiController {
     };
     res.on("close", decrement);
 
-    // 转换消息格式
     const openaiMessages = messages.map((m: any) => ({
       role:
         m.role === "assistant"
@@ -78,34 +68,19 @@ export class AiController {
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
 
-      console.log("[AI Controller] Starting stream chat");
-      console.log("[AI Controller] About to call ai.streamChat at", new Date().toISOString());
       const stream = await this.ai.streamChat(openaiMessages, body?.modelId);
-      console.log("[AI Controller] Got stream result at", new Date().toISOString(), "- about to start processing");
 
-      // 直接转发 OpenAI 的流
-      console.log("[AI Controller] Processing stream");
-      let chunkIndex = 0;
       for await (const chunk of stream) {
-        chunkIndex++;
-        const timestamp = new Date().toISOString();
         const content = chunk.choices[0]?.delta?.content || "";
-        console.log(`[AI Controller] Chunk ${chunkIndex} at ${timestamp}: "${content}"`);
         if (content) {
           res.write(`data: ${JSON.stringify({ type: "text", content })}\n\n`);
           if (typeof (res as any).flush === "function") {
             (res as any).flush();
           }
-        } else {
-          console.log("[AI Controller] Empty chunk received");
         }
       }
-      // 发送结束标记
-      res.write(`data: ${JSON.stringify({ type: "done" })}
-
-`);
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
-      console.log("[AI Controller] Stream completed at", new Date().toISOString());
     } catch (error) {
       console.error("AI chat error:", error);
       decrement();

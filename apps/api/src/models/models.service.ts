@@ -14,7 +14,7 @@ export class ModelsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listProviders() {
-    const models = await this.prisma.client.model.findMany({ 
+    const models = await this.prisma.client.model.findMany({
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -24,10 +24,15 @@ export class ModelsService {
         baseURL: true,
         apiKey: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+      },
     });
-    return { models };
+    return {
+      models: models.map((m) => ({
+        ...m,
+        apiKey: m.apiKey ? `***${m.apiKey.slice(-4)}` : "",
+      })),
+    };
   }
 
   async getPreferredModel(userId: string) {
