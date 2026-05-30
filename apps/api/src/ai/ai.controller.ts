@@ -1,11 +1,21 @@
 import { Controller, Post, Body, UseGuards, Res, Req } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { Response } from "express";
-import { AiService } from "./ai.service";
+import { ChatRunService } from "./chat-run.service";
+import { MessageMapper } from "./message-mapper";
+import { ModelResolver } from "./model-resolver";
+import { ProviderFactory } from "./provider-factory";
+import { SseWriter } from "./sse-writer";
 
 @Controller("ai")
 export class AiController {
-  constructor(private readonly ai: AiService) {}
+  constructor(
+    private readonly chatRuns: ChatRunService,
+    private readonly messageMapper: MessageMapper,
+    private readonly modelResolver: ModelResolver,
+    private readonly providerFactory: ProviderFactory,
+    private readonly sseWriter: SseWriter
+  ) {}
   private readonly activeCounts = new Map<string, number>();
   private readonly requestLog = new Map<string, number[]>();
   private readonly MAX_CONCURRENT = 3;
@@ -14,7 +24,7 @@ export class AiController {
   @Post("chat")
   @UseGuards(AuthGuard("jwt"))
   async chat(
-    @Body() body: { messages: any[]; modelId?: string },
+    @Body() body: { messages: any[]; modelId?: string; conversationId?: string },
     @Res() res: Response,
     @Req() req: any
   ) {
@@ -41,50 +51,81 @@ export class AiController {
     }
     this.activeCounts.set(userId, existing + 1);
 
+    let released = false;
     const decrement = () => {
+      if (released) return;
+      released = true;
       const v = this.activeCounts.get(userId) ?? 1;
       this.activeCounts.set(userId, Math.max(0, v - 1));
     };
     res.on("close", decrement);
 
-    const openaiMessages = messages.map((m: any) => ({
-      role:
-        m.role === "assistant"
-          ? "assistant"
-          : m.role === "system"
-          ? "system"
-          : "user",
-      content: Array.isArray(m.parts)
-        ? m.parts.map((p: any) => (p?.type === "text" ? p.text : "")).join("")
-        : m.content ?? "",
-    }));
+    const startedAt = Date.now();
+    let runId: string | undefined;
 
     try {
-      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("Transfer-Encoding", "chunked");
-      res.setHeader("X-Vercel-AI-Data-Stream", "v1");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders();
+      this.sseWriter.open(res);
 
-      const stream = await this.ai.streamChat(openaiMessages, body?.modelId);
+      const providerMessages = this.messageMapper.toProviderMessages(messages);
+      const userContent = this.messageMapper.getLastUserContent(providerMessages);
+      const runContext = await this.chatRuns.start({
+        userId,
+        modelDbId: body?.modelId,
+        conversationId: body?.conversationId,
+        userContent,
+      });
+      runId = runContext?.run.id;
+
+      const model = await this.modelResolver.resolve(body?.modelId);
+      const provider = this.providerFactory.create(model);
+      const stream = await provider.streamChat(providerMessages);
+      let fullText = "";
+
+      this.sseWriter.write(res, {
+        type: "start",
+        runId,
+        modelId: body?.modelId,
+        conversationId: runContext?.conversation.id,
+      });
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         if (content) {
-          res.write(`data: ${JSON.stringify({ type: "text", content })}\n\n`);
-          if (typeof (res as any).flush === "function") {
-            (res as any).flush();
-          }
+          fullText += content;
+          this.sseWriter.write(res, { type: "delta", runId, content });
         }
       }
-      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-      res.end();
+
+      const elapsedMs = Date.now() - startedAt;
+      await this.chatRuns.finish({
+        runId,
+        conversationId: runContext?.conversation.id,
+        modelDbId: body?.modelId,
+        content: fullText,
+        elapsedMs,
+      });
+      this.sseWriter.write(res, { type: "done", runId, elapsedMs });
     } catch (error) {
       console.error("AI chat error:", error);
+      const message = error instanceof Error ? error.message : "Internal server error";
+      const elapsedMs = Date.now() - startedAt;
+      await this.chatRuns.fail({
+        runId,
+        conversationId: body?.conversationId,
+        errorMessage: message,
+        elapsedMs,
+      });
+      this.sseWriter.write(res, {
+        type: "error",
+        runId,
+        message: message.includes("timed out")
+          ? "模型服务响应超时，请稍后重试或切换模型"
+          : "AI服务暂时不可用，请检查API配置或稍后重试",
+      });
+      this.sseWriter.write(res, { type: "done", runId, elapsedMs });
+    } finally {
       decrement();
-      res.status(500).json({ error: "Internal server error" });
+      this.sseWriter.end(res);
     }
   }
 }

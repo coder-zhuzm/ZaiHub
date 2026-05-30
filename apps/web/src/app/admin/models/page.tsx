@@ -82,7 +82,7 @@ export default function ModelsPage() {
       name: model.name,
       platform: model.platform,
       baseURL: model.baseURL,
-      apiKey: model.apiKey || ''
+      apiKey: ''
     });
     setIsModalOpen(true);
   }
@@ -207,7 +207,8 @@ export default function ModelsPage() {
               onChange={(e) => setForm({ ...form, baseURL: e.target.value })}
             />
             <Input
-              placeholder="API Key (可选)"
+              placeholder={editingId ? 'API Key（留空表示不修改）' : 'API Key'}
+              type="password"
               value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
             />

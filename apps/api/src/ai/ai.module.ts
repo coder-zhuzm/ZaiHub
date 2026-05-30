@@ -9,12 +9,25 @@ import { Module } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { PassportModule } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiService } from './ai.service';
+import { ApiKeyCryptoService } from './api-key-crypto.service';
+import { ChatRunService } from './chat-run.service';
+import { MessageMapper } from './message-mapper';
+import { ModelResolver } from './model-resolver';
+import { ProviderFactory } from './provider-factory';
+import { SseWriter } from './sse-writer';
 
 @Module({
   imports: [PassportModule],
   controllers: [AiController],
-  providers: [PrismaService, AiService],
-  exports: [AiService],
+  providers: [
+    ApiKeyCryptoService,
+    ChatRunService,
+    MessageMapper,
+    ModelResolver,
+    PrismaService,
+    ProviderFactory,
+    SseWriter,
+  ],
+  exports: [ApiKeyCryptoService, ModelResolver],
 })
 export class AiModule {}

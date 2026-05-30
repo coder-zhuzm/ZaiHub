@@ -30,8 +30,10 @@ export default function TypewriterMarkdown({
         (textRef.current && !text.startsWith(textRef.current.substring(0, 10)))) {
       console.log('[Typewriter] New message detected, resetting');
       currentIndexRef.current = 0;
-      setDisplayedText('');
-      setIsComplete(false);
+      queueMicrotask(() => {
+        setDisplayedText('');
+        setIsComplete(false);
+      });
       isInitializedRef.current = false;
     }
     
@@ -41,8 +43,10 @@ export default function TypewriterMarkdown({
     if (!isInitializedRef.current) {
       console.log('[Typewriter] Initializing with text:', text);
       isInitializedRef.current = true;
-      setDisplayedText('');
-      setIsComplete(false);
+      queueMicrotask(() => {
+        setDisplayedText('');
+        setIsComplete(false);
+      });
       currentIndexRef.current = 0;
     }
   }, [text]);
@@ -91,8 +95,10 @@ export default function TypewriterMarkdown({
   // 当流式结束时，确保显示完整文本
   useEffect(() => {
     if (!isStreaming && text && displayedText !== text) {
-      setDisplayedText(text);
-      setIsComplete(true);
+      queueMicrotask(() => {
+        setDisplayedText(text);
+        setIsComplete(true);
+      });
       currentIndexRef.current = text.length;
     }
   }, [isStreaming, text, displayedText]);

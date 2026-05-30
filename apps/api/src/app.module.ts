@@ -7,6 +7,7 @@ import { UsersController } from './users.controller';
 import { AuthModule } from './auth/auth.module';
 import { AiModule } from './ai/ai.module';
 import { ModelsModule } from './models/models.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ModelsModule } from './models/models.module';
     AuthModule,
     AiModule,
     ModelsModule,
+    ConversationsModule,
   ],
   controllers: [AppController, UsersController],
 })

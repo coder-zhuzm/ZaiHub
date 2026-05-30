@@ -8,10 +8,14 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateModelDto, UpdateModelDto } from "./dto";
+import { ApiKeyCryptoService } from "../ai/api-key-crypto.service";
 
 @Injectable()
 export class ModelsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly apiKeyCrypto: ApiKeyCryptoService,
+  ) {}
 
   async listProviders() {
     const models = await this.prisma.client.model.findMany({
@@ -23,6 +27,7 @@ export class ModelsService {
         platform: true,
         baseURL: true,
         apiKey: true,
+        enabled: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -30,7 +35,7 @@ export class ModelsService {
     return {
       models: models.map((m) => ({
         ...m,
-        apiKey: m.apiKey ? `***${m.apiKey.slice(-4)}` : "",
+        apiKey: this.apiKeyCrypto.mask(m.apiKey),
       })),
     };
   }
@@ -52,22 +57,30 @@ export class ModelsService {
   }
 
   async createModel(dto: CreateModelDto) {
-    return this.prisma.client.model.create({
+    const created = await this.prisma.client.model.create({
       data: {
         modelId: dto.modelId,
         name: dto.name,
         platform: dto.platform,
         baseURL: dto.baseURL,
-        apiKey: dto.apiKey,
+        apiKey: dto.apiKey ? this.apiKeyCrypto.encrypt(dto.apiKey) : "",
       },
     });
+    return { ...created, apiKey: this.apiKeyCrypto.mask(created.apiKey) };
   }
 
   async updateModel(id: string, dto: UpdateModelDto) {
-    return this.prisma.client.model.update({
+    const { apiKey, ...rest } = dto;
+    const data: UpdateModelDto = { ...rest };
+    if (apiKey && !apiKey.startsWith("***")) {
+      data.apiKey = this.apiKeyCrypto.encrypt(apiKey);
+    }
+
+    const updated = await this.prisma.client.model.update({
       where: { id },
-      data: dto,
+      data,
     });
+    return { ...updated, apiKey: this.apiKeyCrypto.mask(updated.apiKey) };
   }
 
   async deleteModel(id: string) {

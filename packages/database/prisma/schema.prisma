@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  nickname  String?
-  role      String   @default("user")
+  id             String         @id @default(uuid())
+  email          String         @unique
+  password       String
+  nickname       String?
+  role           String         @default("user")
   preferredModel String?
-  createdAt DateTime @default(now())
-  chats     Chat[]
+  createdAt      DateTime       @default(now())
+  chats          Chat[]
+  conversations  Conversation[]
 }
 
 model Chat {
@@ -32,7 +33,7 @@ model Model {
   id        String   @id @default(uuid())
   modelId   String   @default("")
   name      String
-  platform  String   // e.g. 'iflow' | 'openai'
+  platform  String // e.g. 'iflow' | 'openai'
   baseURL   String
   apiKey    String
   enabled   Boolean  @default(true)
@@ -40,3 +41,41 @@ model Model {
   updatedAt DateTime @updatedAt
 }
 
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  runs     ChatRun[]
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  modelDbId      String?
+  runId          String?
+  role           String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model ChatRun {
+  id                 String    @id @default(uuid())
+  conversationId     String
+  userMessageId      String
+  assistantMessageId String?
+  modelDbId          String?
+  status             String
+  elapsedMs          Int?
+  errorMessage       String?
+  createdAt          DateTime  @default(now())
+  completedAt        DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}

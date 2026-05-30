@@ -16,8 +16,10 @@ export default function SimpleTypewriter({
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
-    setDisplayedText('');
-    setCurrentIndex(0);
+    queueMicrotask(() => {
+      setDisplayedText('');
+      setCurrentIndex(0);
+    });
   }, [text]);
 
   useEffect(() => {

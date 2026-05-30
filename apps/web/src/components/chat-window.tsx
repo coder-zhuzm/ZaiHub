@@ -1,31 +1,17 @@
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import EnhancedMarkdown from '@/components/enhanced-markdown';
 import SelectableTitle from '@/components/selectable-title';
-import StreamingText from '@/components/streaming-text';
-import type { UIMessage } from 'ai';
-
-interface Model {
-  id: string;
-  modelId: string;
-  name: string;
-  platform: string;
-}
-
-interface ChatSession {
-  messages: UIMessage[];
-  status: string;
-  ref: React.RefObject<HTMLDivElement>;
-}
+import MessageList from '@/components/message-list';
+import type { ChatSession } from '@/hooks/useChatSessions';
+import type { ModelSummary } from '@/lib/chat-api';
 
 interface ChatWindowProps {
   windowIndex: number;
-  model: Model | null;
+  model: ModelSummary | null;
   session: ChatSession | null;
   isActive: boolean;
-  models: Model[];
+  models: ModelSummary[];
   onModelSelect: (windowIndex: number, modelId: string) => void;
   onRetry?: (windowIndex: number) => void;
 }
@@ -79,63 +65,12 @@ export default function ChatWindow({
         {isActive ? (
           model && session ? (
             <ScrollArea
-              ref={session.ref}
+              data-chat-scroll-root={model.id}
               className="flex-1 h-full px-3"
               scrollHideDelay={0}
             >
               <div className="space-y-3 py-3 min-h-full">
-                {session.messages.length === 0 ? (
-                  <div className="text-center text-gray-500 text-xs py-8">
-                    开始与 {model.name} 对话吧！
-                  </div>
-                ) : (
-                  session.messages.map((message: UIMessage) => {
-                    const content = message.parts.map((p) => (p.type === 'text' ? p.text : '')).join('');
-                    const isLastMessage = session.messages[session.messages.length - 1].id === message.id;
-                    const isStreaming = session.status === 'streaming' && isLastMessage;
-                    // 流式消息内容为空时不渲染，由"正在回复..."气泡代替
-                    if (isStreaming && !content) return null;
-                    return (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`flex items-start gap-1 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                        <Avatar className="w-5 h-5 shrink-0">
-                          <AvatarFallback className="text-xs">
-                            {message.role === 'user' ? 'U' : model.name.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div
-                          className={cn(
-                            "px-2 py-1 rounded-lg text-xs wrap-break-word",
-                            message.role === 'user'
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-gray-100 text-gray-800 border'
-                          )}
-                        >
-                          {message.role === 'user' ? (
-                            content
-                          ) : (
-                            isStreaming ? (
-                              <StreamingText
-                                text={content}
-                                isStreaming={true}
-                                className="text-xs"
-                              />
-                            ) : (
-                              <EnhancedMarkdown
-                                content={content}
-                                className="text-xs"
-                              />
-                            )
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })
-                )}
+                <MessageList messages={session.messages} model={model} status={session.status} />
 
                 {session.status === 'loading' && (
                   <div className="flex justify-start">

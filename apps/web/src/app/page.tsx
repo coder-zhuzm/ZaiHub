@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import type { UIMessage } from 'ai';
 import WindowControls from '@/components/window-controls';
 import ChatWindow from '@/components/chat-window';
@@ -11,140 +10,110 @@ import EmptyState from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { listModels, type ModelSummary } from '@/lib/chat-api';
+import { useChatSessions } from '@/hooks/useChatSessions';
+import { useChatStream } from '@/hooks/useChatStream';
+import { useConversations } from '@/hooks/useConversations';
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [chatInput, setChatInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const API_BASE = process.env.NEXT_PUBLIC_API_ORIGIN || process.env.API_ORIGIN?.replace('http://localhost:', 'http://localhost:') || '/api';
-  const [models, setModels] = useState<{ id: string; modelId: string; name: string; platform: string }[]>([]);
+  const [models, setModels] = useState<ModelSummary[]>([]);
   const [modelsKey, setModelsKey] = useState(0); // 用于强制刷新模型列表
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [windowModels, setWindowModels] = useState<string[]>(['', '', '']); // 最多3个窗口
-  const [activeWindows, setActiveWindows] = useState<number>(1); // 活跃窗口数量
-  const [chatSessions, setChatSessions] = useState<Record<string, {
-    messages: UIMessage[];
-    status: string;
-    ref: React.RefObject<HTMLDivElement>;
-  }>>({});
-  const listRefs = useRef<Record<string, React.RefObject<HTMLDivElement | null>>>({});
+  const activeConversationIdRef = useRef<string | null>(null);
+  const {
+    activeWindows,
+    appendAssistantDelta,
+    appendUserMessage,
+    chatSessions,
+    failModel,
+    finishModel,
+    initializeFirstModel,
+    loadConversationMessages,
+    quickSelect,
+    resetSessions,
+    selectedModels,
+    selectWindowModel,
+    setModelLoading,
+    startAssistantMessage,
+    windowModels,
+  } = useChatSessions(models);
+  const { isSending, sendMessageForModel, setIsSending } = useChatStream({
+    appendAssistantDelta,
+    failModel,
+    finishModel,
+    startAssistantMessage,
+  });
+  const {
+    activeConversationId,
+    conversations,
+    isLoadingConversations,
+    loadConversation,
+    refreshConversations,
+    removeConversation,
+    startNewConversation,
+  } = useConversations(token);
 
   useEffect(() => {
-    const stored = localStorage.getItem('token');
-    if (stored) {
-      setToken(stored);
-    }
-    setIsLoading(false);
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setToken(getStoredToken());
+      setIsLoading(false);
+    });
   }, []);
-
-  // 快速选择功能
-  const handleQuickSelect = (count: number) => {
-    setActiveWindows(count);
-    const newWindowModels = [...windowModels];
-
-    // 为每个窗口分配模型
-    for (let i = 0; i < count; i++) {
-      if (models[i] && !newWindowModels.includes(models[i].id)) {
-        newWindowModels[i] = models[i].id;
-      }
-    }
-
-    // 更新选中的模型列表
-    const activeModelIds = newWindowModels.slice(0, count).filter(id => id);
-    setWindowModels(newWindowModels);
-    setSelectedModels(activeModelIds);
-  };
-
-  // 为每个窗口的模型创建独立的聊天会话
-  useEffect(() => {
-    const newSessions: Record<string, any> = {};
-    windowModels.forEach((modelId, index) => {
-      if (modelId && index < activeWindows && !chatSessions[modelId]) {
-        const model = models.find(m => m.id === modelId);
-        if (model) {
-          if (!listRefs.current[modelId]) {
-            listRefs.current[modelId] = { current: null };
-          }
-          newSessions[modelId] = {
-            messages: [],
-            status: 'ready',
-            ref: listRefs.current[modelId]
-          };
-        }
-      }
-    });
-
-    // 只添加新的会话，保留现有的
-    setChatSessions(prev => ({ ...prev, ...newSessions }));
-  }, [windowModels, activeWindows, models]);
-
-  // 当窗口模型改变时更新选中的模型列表
-  useEffect(() => {
-    const activeModelIds = windowModels.slice(0, activeWindows).filter(id => id);
-    setSelectedModels(activeModelIds);
-  }, [windowModels, activeWindows]);
-
-  // 为所有聊天窗口添加自动滚动逻辑
-  useEffect(() => {
-    Object.keys(chatSessions).forEach(modelId => {
-      const session = chatSessions[modelId];
-      if (session?.ref?.current) {
-        const el = session.ref.current;
-        // 获取ScrollArea的内部滚动容器
-        const scrollContainer = el.querySelector('[data-radix-scroll-area-viewport]');
-        if (scrollContainer) {
-          const distance = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-          if (distance < 80 || session.status === 'submitted' || session.status === 'streaming') {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
-          }
-        }
-      }
-    });
-  }, [chatSessions]);
 
   useEffect(() => {
     if (!token) return;
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/models`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json();
-        const fetchedModels = (data.models ?? []).map((m: { id: string; modelId: string; name: string; platform: string }) => ({
-          id: m.id,
-          modelId: m.modelId,
-          name: m.name,
-          platform: m.platform
-        }));
+        const fetchedModels = await listModels(token);
         setModels(fetchedModels);
-
-        // 初始化时默认选中第一个模型到第一个窗口
-        if (fetchedModels.length > 0 && !windowModels[0]) {
-          const newWindowModels = [...windowModels];
-          newWindowModels[0] = fetchedModels[0].id;
-          setWindowModels(newWindowModels);
-          setSelectedModels([fetchedModels[0].id]);
-        }
+        initializeFirstModel(fetchedModels);
+        await refreshConversations();
       } catch (error) {
         console.error('Failed to fetch models:', error);
       }
     })();
-  }, [token, modelsKey]); // 添加modelsKey作为依赖
+  }, [token, modelsKey, initializeFirstModel, refreshConversations]);
 
   // 刷新模型列表的函数
   const refreshModels = () => {
     setModelsKey(prev => prev + 1);
   };
 
-  const handleWindowModelSelect = (windowIndex: number, modelId: string) => {
-    const newWindowModels = [...windowModels];
-    newWindowModels[windowIndex] = modelId;
-    setWindowModels(newWindowModels);
+  const handleNewConversation = async () => {
+    const conversation = await startNewConversation();
+    if (!conversation) return;
+    activeConversationIdRef.current = conversation.id;
+    resetSessions();
+    setChatInput('');
+  };
+
+  const handleLoadConversation = async (id: string) => {
+    const conversation = await loadConversation(id);
+    if (!conversation) return;
+    activeConversationIdRef.current = id;
+    loadConversationMessages(conversation.messages);
+    setChatInput('');
+  };
+
+  const handleDeleteConversation = async (id: string) => {
+    await removeConversation(id);
+    if (activeConversationId === id) {
+      activeConversationIdRef.current = null;
+      resetSessions();
+      setChatInput('');
+    }
   };
 
   const retryMessage = async (windowIndex: number) => {
+    if (!token) return;
+
     const modelId = windowModels[windowIndex];
     if (!modelId) return;
 
@@ -161,165 +130,31 @@ export default function Home() {
     if (!lastUserMessage) return;
 
     setIsSending(true);
-    setChatSessions(prev => ({
-      ...prev,
-      [modelId]: { ...prev[modelId], messages: filteredMessages, status: 'loading' }
-    }));
-
-    await sendMessageForModel(lastUserMessage, modelId, false);
+    setModelLoading(modelId, filteredMessages);
+    await sendMessageForModel({
+      modelId,
+      messages: filteredMessages,
+      token,
+    });
     setIsSending(false);
   };
 
-  const sendMessageForModel = async (userMessage: UIMessage, modelId: string, addToHistory = true) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('No token found in localStorage');
-      return;
-    }
-
-    const session = chatSessions[modelId];
-    if (!session) return;
-
-    // 如果是重试，用户消息已经在历史中，不需要重复添加
-    const messages = addToHistory ? [...session.messages, userMessage] : session.messages;
-
-    try {
-      const response = await fetch(`${API_BASE}/ai/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          messages,
-          modelId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      const isDataStream = response.headers.get('x-vercel-ai-data-stream') === 'v1';
-      const isStream = contentType.includes('text/event-stream') || isDataStream;
-      
-      if (isStream && response.body) {
-        const messageId = `ai-${Date.now()}-${modelId}`;
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        // 流开始时创建空消息
-        setChatSessions(prev => ({
-          ...prev,
-          [modelId]: {
-            ...prev[modelId],
-            messages: [...(prev[modelId]?.messages || []), { id: messageId, role: 'assistant', parts: [{ type: 'text', text: '' }] }] as UIMessage[],
-            status: 'streaming'
-          }
-        }));
-
-        // 流式解析
-        const reader = response.body.getReader();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value, { stream: true });
-          
-          // 按空行分割SSE事件，确保每个完整事件单独处理
-          const events = chunk.split('\n\n').filter(event => event.trim());
-          
-          for (const event of events) {
-            const lines = event.split('\n');
-            
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              
-              try {
-                // 标准的 SSE 格式: "data: {...}"
-                if (line.startsWith('data:')) {
-                  const dataStr = line.slice(5).trim();
-                  if (dataStr) {
-                    const data = JSON.parse(dataStr);
-                    
-                    if (data.type === 'text' && data.content) {
-                      fullText += data.content;
-                      
-                      // 立即更新消息内容，确保实时渲染
-                      flushSync(() => {
-                        setChatSessions(prev => {
-                          const messages = prev[modelId]?.messages || [];
-                          const updatedMessages = messages.map(m => 
-                            m.id === messageId 
-                              ? { ...m, parts: [{ type: 'text', text: fullText }] }
-                              : m
-                          );
-                          
-                          return {
-                            ...prev,
-                            [modelId]: {
-                              ...prev[modelId],
-                              messages: updatedMessages as UIMessage[],
-                              status: 'streaming'
-                            }
-                          };
-                        });
-                      });
-                    } else if (data.type === 'done') {
-                      // stream ended
-                    }
-                }
-              }
-            } catch (e) {
-              console.warn('Stream parse error:', e);
-            }
-          }
-        }
-        }
-        
-        // 流结束
-        setChatSessions(prev => ({
-          ...prev,
-          [modelId]: {
-            ...prev[modelId],
-            status: 'ready'
-          }
-        }));
-      } else {
-        const data = await response.json();
-        const content = data?.content || data?.text || JSON.stringify(data);
-        const aiMessage: UIMessage = { id: `ai-${Date.now()}-${modelId}`, role: 'assistant', parts: [{ type: 'text', text: content }] };
-        setChatSessions(prev => ({
-          ...prev,
-          [modelId]: { ...prev[modelId], messages: [...prev[modelId]?.messages || [], aiMessage], status: 'ready' }
-        }));
-      }
-    } catch (error) {
-      console.error(`Failed to send message to model ${modelId}:`, error);
-      // const model = models.find(m => m.id === modelId);
-      const errorMessage: UIMessage = {
-        id: `error-${Date.now()}-${modelId}`,
-        role: 'assistant',
-        parts: [{ type: 'text', text: `AI服务暂时不可用，请检查API配置或稍后重试` }]
-      };
-
-      setChatSessions(prev => ({
-        ...prev,
-        [modelId]: {
-          ...prev[modelId],
-          messages: [...prev[modelId]?.messages || [], errorMessage],
-          status: 'error'
-        }
-      }));
-    }
-  };
-
   const sendMessage = async (content: string) => {
-    if (!content.trim() || isSending) return;
+    if (!content.trim() || isSending || !token) return;
 
     setIsSending(true);
+    let conversationId = activeConversationIdRef.current;
+
+    if (!conversationId) {
+      const conversation = await startNewConversation();
+      conversationId = conversation?.id ?? null;
+      activeConversationIdRef.current = conversationId;
+    }
+
+    if (!conversationId) {
+      setIsSending(false);
+      return;
+    }
 
     const userMessage: UIMessage = {
       id: `user-${Date.now()}`,
@@ -329,22 +164,21 @@ export default function Home() {
 
     // 为所有选中的模型添加用户消息并设置为loading状态
     selectedModels.forEach(modelId => {
-      setChatSessions(prev => ({
-        ...prev,
-        [modelId]: {
-          ...prev[modelId],
-          messages: [...prev[modelId]?.messages || [], userMessage],
-          status: 'loading'
-        }
-      }));
+      appendUserMessage(modelId, userMessage);
     });
 
     // 清空输入框
     setChatInput('');
 
     // 为每个选中的模型并行发送消息
-    const promises = selectedModels.map(modelId => sendMessageForModel(userMessage, modelId));
+    const promises = selectedModels.map((modelId) => sendMessageForModel({
+      modelId,
+      conversationId,
+      messages: [...(chatSessions[modelId]?.messages || []), userMessage],
+      token,
+    }));
     await Promise.allSettled(promises);
+    await refreshConversations();
 
     // 所有请求完成后重新启用发送
     setIsSending(false);
@@ -386,12 +220,59 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex h-full bg-gray-50">
+      <aside className="w-72 shrink-0 border-r bg-white flex flex-col min-h-0">
+        <div className="p-3 border-b space-y-2">
+          <Button onClick={handleNewConversation} className="w-full" disabled={isSending}>
+            新建会话
+          </Button>
+          <Button onClick={() => refreshConversations()} variant="outline" className="w-full" disabled={isLoadingConversations}>
+            刷新历史
+          </Button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+          {conversations.length === 0 ? (
+            <div className="text-xs text-gray-500 text-center py-6">
+              暂无历史会话
+            </div>
+          ) : conversations.map((conversation) => (
+            <div
+              key={conversation.id}
+              className={`group flex items-start gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
+                conversation.id === activeConversationId
+                  ? 'border-blue-200 bg-blue-50'
+                  : 'border-transparent hover:bg-gray-50'
+              }`}
+            >
+              <button
+                className="min-w-0 flex-1 text-left"
+                onClick={() => handleLoadConversation(conversation.id)}
+              >
+                <div className="truncate text-sm font-medium text-gray-900">
+                  {conversation.title}
+                </div>
+                <div className="mt-1 truncate text-xs text-gray-500">
+                  {conversation.lastMessage || `${conversation.messageCount} 条消息`}
+                </div>
+              </button>
+              <button
+                className="text-xs text-gray-400 hover:text-red-600"
+                onClick={() => handleDeleteConversation(conversation.id)}
+                aria-label="删除会话"
+              >
+                删除
+              </button>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      <div className="flex flex-1 min-w-0 flex-col">
       {/* 快速选择和布局控制 */}
       <WindowControls
         models={models}
         activeWindows={activeWindows}
-        onQuickSelect={handleQuickSelect}
+        onQuickSelect={quickSelect}
         selectedModelsCount={selectedModels.length}
         onRefreshModels={refreshModels}
       />
@@ -419,7 +300,7 @@ export default function Home() {
                     session={session}
                     isActive={true}
                     models={models}
-                    onModelSelect={handleWindowModelSelect}
+                    onModelSelect={selectWindowModel}
                     onRetry={retryMessage}
                   />
                 );
@@ -452,6 +333,23 @@ export default function Home() {
           disabled={isSending}
         />
       </main>
+      </div>
     </div>
   );
+}
+
+function getStoredToken() {
+  const localToken = localStorage.getItem('token');
+  if (localToken) return localToken;
+
+  const cookieToken = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith('token='))
+    ?.slice('token='.length);
+  if (cookieToken) {
+    localStorage.setItem('token', cookieToken);
+    return cookieToken;
+  }
+
+  return null;
 }
