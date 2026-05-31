@@ -9,7 +9,6 @@ const command = process.argv.slice(2).join(' ');
 
 try {
   console.log('Loading environment variables from root .env file...');
-  console.log('DATABASE_URL:', process.env.DATABASE_URL);
   
   // Execute the passed command
   execSync(command, {

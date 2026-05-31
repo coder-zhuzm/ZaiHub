@@ -8,8 +8,9 @@ export default function MainNav() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setIsAdmin(userService.parseToken()?.role === 'admin');
+    queueMicrotask(async () => {
+      const user = await userService.getCurrentUser();
+      setIsAdmin(user?.role === 'admin');
     });
   }, []);
 
