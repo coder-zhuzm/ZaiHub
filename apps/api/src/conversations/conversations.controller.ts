@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ConversationsService } from "./conversations.service";
 import { CreateConversationDto, UpdateConversationDto } from "./dto";
@@ -9,8 +9,8 @@ export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
   @Get()
-  list(@Req() req: any) {
-    return this.conversations.list(req.user.userId);
+  list(@Req() req: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.conversations.list(req.user.userId, { cursor, limit });
   }
 
   @Get(":id")

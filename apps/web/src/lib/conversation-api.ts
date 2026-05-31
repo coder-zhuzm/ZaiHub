@@ -28,13 +28,23 @@ export type ConversationDetail = {
   messages: ConversationMessage[];
 };
 
-export async function listConversations(token: string) {
-  const res = await fetch(`${getApiBase()}/conversations`, {
+export type ConversationPage = {
+  conversations: ConversationSummary[];
+  nextCursor: string | null;
+};
+
+export async function listConversations(token: string, cursor?: string) {
+  const params = new URLSearchParams({ limit: '20' });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`${getApiBase()}/conversations?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to list conversations: HTTP ${res.status}`);
   const data = await res.json();
-  return (data.conversations ?? []) as ConversationSummary[];
+  return {
+    conversations: (data.conversations ?? []) as ConversationSummary[],
+    nextCursor: (data.nextCursor ?? null) as string | null,
+  } satisfies ConversationPage;
 }
 
 export async function getConversation(token: string, id: string) {
@@ -66,4 +76,18 @@ export async function deleteConversation(token: string, id: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to delete conversation: HTTP ${res.status}`);
+}
+
+export async function updateConversation(token: string, id: string, title: string) {
+  const res = await fetch(`${getApiBase()}/conversations/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`Failed to update conversation: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.conversation as ConversationDetail;
 }

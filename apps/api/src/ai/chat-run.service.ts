@@ -9,17 +9,34 @@ export class ChatRunService {
     userId: string;
     modelDbId?: string;
     conversationId?: string;
+    clientMessageId?: string;
     userContent: string;
   }) {
     try {
       const conversation = await this.resolveConversation(params);
-      const userMessage = await this.prisma.client.message.create({
-        data: {
-          conversationId: conversation.id,
-          role: "user",
-          content: params.userContent,
-        },
-      });
+      const userMessage = params.clientMessageId
+        ? await this.prisma.client.message.upsert({
+            where: {
+              conversationId_clientMessageId: {
+                conversationId: conversation.id,
+                clientMessageId: params.clientMessageId,
+              },
+            },
+            update: {},
+            create: {
+              conversationId: conversation.id,
+              clientMessageId: params.clientMessageId,
+              role: "user",
+              content: params.userContent,
+            },
+          })
+        : await this.prisma.client.message.create({
+            data: {
+              conversationId: conversation.id,
+              role: "user",
+              content: params.userContent,
+            },
+          });
       const run = await this.prisma.client.chatRun.create({
         data: {
           conversationId: conversation.id,
@@ -42,9 +59,20 @@ export class ChatRunService {
     userContent: string;
   }) {
     if (params.conversationId) {
-      return this.prisma.client.conversation.update({
+      const conversation = await this.prisma.client.conversation.findFirstOrThrow({
         where: { id: params.conversationId, userId: params.userId },
-        data: { updatedAt: new Date() },
+        include: { _count: { select: { messages: true } } },
+      });
+      const firstMessageTitle = params.userContent.slice(0, 80);
+
+      return this.prisma.client.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          ...(conversation._count.messages === 0 && conversation.title === "新会话" && firstMessageTitle
+            ? { title: firstMessageTitle }
+            : {}),
+          updatedAt: new Date(),
+        },
       });
     }
 

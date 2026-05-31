@@ -17,6 +17,20 @@ export class ModelsService {
     private readonly apiKeyCrypto: ApiKeyCryptoService,
   ) {}
 
+  async listSummaries() {
+    const models = await this.prisma.client.model.findMany({
+      where: { enabled: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        modelId: true,
+        name: true,
+        platform: true,
+      },
+    });
+    return { models };
+  }
+
   async listProviders() {
     const models = await this.prisma.client.model.findMany({
       orderBy: { createdAt: "desc" },

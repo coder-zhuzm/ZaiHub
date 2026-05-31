@@ -56,6 +56,7 @@ model Conversation {
 model Message {
   id             String   @id @default(uuid())
   conversationId String
+  clientMessageId String?
   modelDbId      String?
   runId          String?
   role           String
@@ -63,6 +64,8 @@ model Message {
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, clientMessageId])
 }
 
 model ChatRun {

@@ -8,6 +8,9 @@ import StatusIndicator from '@/components/status-indicator';
 import ChatInput from '@/components/chat-input';
 import EmptyState from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { listModels, type ModelSummary } from '@/lib/chat-api';
@@ -21,6 +24,9 @@ export default function Home() {
   const [chatInput, setChatInput] = useState('');
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [modelsKey, setModelsKey] = useState(0); // 用于强制刷新模型列表
+  const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+  const [isConversationSidebarOpen, setIsConversationSidebarOpen] = useState(true);
   const activeConversationIdRef = useRef<string | null>(null);
   const {
     activeWindows,
@@ -49,9 +55,12 @@ export default function Home() {
     activeConversationId,
     conversations,
     isLoadingConversations,
+    loadMoreConversations,
     loadConversation,
+    nextCursor,
     refreshConversations,
     removeConversation,
+    renameConversation,
     startNewConversation,
   } = useConversations(token);
 
@@ -111,6 +120,18 @@ export default function Home() {
     }
   };
 
+  const handleOpenRenameConversation = (id: string, title: string) => {
+    setRenameConversationId(id);
+    setRenameTitle(title);
+  };
+
+  const handleRenameConversation = async () => {
+    if (!renameConversationId || !renameTitle.trim()) return;
+    await renameConversation(renameConversationId, renameTitle.trim());
+    setRenameConversationId(null);
+    setRenameTitle('');
+  };
+
   const retryMessage = async (windowIndex: number) => {
     if (!token) return;
 
@@ -133,6 +154,7 @@ export default function Home() {
     setModelLoading(modelId, filteredMessages);
     await sendMessageForModel({
       modelId,
+      conversationId: activeConversationIdRef.current ?? undefined,
       messages: filteredMessages,
       token,
     });
@@ -221,51 +243,128 @@ export default function Home() {
 
   return (
     <div className="flex h-full bg-gray-50">
-      <aside className="w-72 shrink-0 border-r bg-white flex flex-col min-h-0">
-        <div className="p-3 border-b space-y-2">
-          <Button onClick={handleNewConversation} className="w-full" disabled={isSending}>
-            新建会话
-          </Button>
-          <Button onClick={() => refreshConversations()} variant="outline" className="w-full" disabled={isLoadingConversations}>
-            刷新历史
-          </Button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
-          {conversations.length === 0 ? (
-            <div className="text-xs text-gray-500 text-center py-6">
-              暂无历史会话
+      <aside className={`${isConversationSidebarOpen ? 'w-72' : 'w-12'} shrink-0 border-r bg-white flex flex-col min-h-0 transition-[width] duration-200`}>
+        {isConversationSidebarOpen ? (
+          <>
+            <div className="p-3 border-b space-y-2">
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsConversationSidebarOpen(false)}
+                  title="收起会话列表"
+                  aria-label="收起会话列表"
+                >
+                  <PanelLeftClose />
+                </Button>
+              </div>
+              <Button onClick={handleNewConversation} className="w-full" disabled={isSending}>
+                新建会话
+              </Button>
+              <Button onClick={() => refreshConversations()} variant="outline" className="w-full" disabled={isLoadingConversations}>
+                刷新历史
+              </Button>
             </div>
-          ) : conversations.map((conversation) => (
-            <div
-              key={conversation.id}
-              className={`group flex items-start gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
-                conversation.id === activeConversationId
-                  ? 'border-blue-200 bg-blue-50'
-                  : 'border-transparent hover:bg-gray-50'
-              }`}
+            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+              {conversations.length === 0 ? (
+                <div className="text-xs text-gray-500 text-center py-6">
+                  暂无历史会话
+                </div>
+              ) : conversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={`group flex items-start gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
+                    conversation.id === activeConversationId
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-transparent hover:bg-gray-50'
+                  }`}
+                >
+                  <button
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => handleLoadConversation(conversation.id)}
+                  >
+                    <div className="truncate text-sm font-medium text-gray-900">
+                      {conversation.title}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-gray-500">
+                      {conversation.lastMessage || `${conversation.messageCount} 条消息`}
+                    </div>
+                  </button>
+                  <button
+                    className="text-xs text-gray-400 hover:text-blue-600"
+                    onClick={() => handleOpenRenameConversation(conversation.id, conversation.title)}
+                    aria-label="重命名会话"
+                  >
+                    重命名
+                  </button>
+                  <button
+                    className="text-xs text-gray-400 hover:text-red-600"
+                    onClick={() => handleDeleteConversation(conversation.id)}
+                    aria-label="删除会话"
+                  >
+                    删除
+                  </button>
+                </div>
+              ))}
+              {nextCursor && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => loadMoreConversations()}
+                  disabled={isLoadingConversations}
+                >
+                  {isLoadingConversations ? '加载中...' : '加载更多'}
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex justify-center border-b p-1.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsConversationSidebarOpen(true)}
+              title="展开会话列表"
+              aria-label="展开会话列表"
             >
-              <button
-                className="min-w-0 flex-1 text-left"
-                onClick={() => handleLoadConversation(conversation.id)}
-              >
-                <div className="truncate text-sm font-medium text-gray-900">
-                  {conversation.title}
-                </div>
-                <div className="mt-1 truncate text-xs text-gray-500">
-                  {conversation.lastMessage || `${conversation.messageCount} 条消息`}
-                </div>
-              </button>
-              <button
-                className="text-xs text-gray-400 hover:text-red-600"
-                onClick={() => handleDeleteConversation(conversation.id)}
-                aria-label="删除会话"
-              >
-                删除
-              </button>
-            </div>
-          ))}
-        </div>
+              <PanelLeftOpen />
+            </Button>
+          </div>
+        )}
       </aside>
+
+      <Dialog open={Boolean(renameConversationId)} onOpenChange={(open) => {
+        if (!open) {
+          setRenameConversationId(null);
+          setRenameTitle('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>重命名会话</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameTitle}
+            onChange={(event) => setRenameTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') handleRenameConversation();
+            }}
+            placeholder="输入会话标题"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setRenameConversationId(null);
+              setRenameTitle('');
+            }}>
+              取消
+            </Button>
+            <Button onClick={handleRenameConversation} disabled={!renameTitle.trim()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-1 min-w-0 flex-col">
       {/* 快速选择和布局控制 */}

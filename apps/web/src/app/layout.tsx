@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from 'next/link';
 import UserProfile from '@/components/user-profile';
+import MainNav from '@/components/main-nav';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,18 +37,7 @@ export default function RootLayout({
               <span className="text-xl font-bold text-gray-800">ZaiHub</span>
             </Link>
             <nav className="flex items-center gap-6">
-              <Link 
-                href="/" 
-                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                聊天对比
-              </Link>
-              <Link 
-                href="/admin/models" 
-                className="text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                模型管理
-              </Link>
+              <MainNav />
               <UserProfile />
             </nav>
           </div>

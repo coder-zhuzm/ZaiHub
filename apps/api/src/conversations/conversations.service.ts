@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateConversationDto, UpdateConversationDto } from "./dto";
 
@@ -6,22 +6,37 @@ import { CreateConversationDto, UpdateConversationDto } from "./dto";
 export class ConversationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(userId: string) {
-    const conversations = await this.prisma.client.conversation.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-      include: {
-        messages: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { content: true, createdAt: true },
+  async list(userId: string, params: { cursor?: string; limit?: string }) {
+    const parsedLimit = Number.parseInt(params.limit ?? "", 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 20;
+    let conversations;
+    try {
+      conversations = await this.prisma.client.conversation.findMany({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+        take: limit + 1,
+        ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+        include: {
+          messages: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { content: true, createdAt: true },
+          },
+          _count: { select: { messages: true, runs: true } },
         },
-        _count: { select: { messages: true, runs: true } },
-      },
-    });
+      });
+    } catch (error) {
+      if (isPrismaErrorWithCode(error, "P2025")) {
+        throw new BadRequestException("invalid_conversation_cursor");
+      }
+      throw error;
+    }
+
+    const hasNextPage = conversations.length > limit;
+    const items = conversations.slice(0, limit);
 
     return {
-      conversations: conversations.map((conversation) => ({
+      conversations: items.map((conversation) => ({
         id: conversation.id,
         title: conversation.title || conversation.messages[0]?.content?.slice(0, 80) || "新会话",
         createdAt: conversation.createdAt,
@@ -30,6 +45,7 @@ export class ConversationsService {
         messageCount: conversation._count.messages,
         runCount: conversation._count.runs,
       })),
+      nextCursor: hasNextPage ? items.at(-1)?.id ?? null : null,
     };
   }
 
@@ -80,4 +96,8 @@ export class ConversationsService {
     });
     if (!conversation) throw new NotFoundException("conversation_not_found");
   }
+}
+
+function isPrismaErrorWithCode(error: unknown, code: string) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

@@ -3,6 +3,8 @@ import { AuthGuard } from "@nestjs/passport";
 import { ModelsService } from "./models.service";
 import { ModelResolver } from "../ai/model-resolver";
 import { UpdatePreferredModelDto, CreateModelDto, UpdateModelDto } from "./dto";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 
 @Controller("models")
 export class ModelsController {
@@ -11,6 +13,13 @@ export class ModelsController {
   @Get()
   @UseGuards(AuthGuard("jwt"))
   async list() {
+    return this.models.listSummaries();
+  }
+
+  @Get("admin")
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles("admin")
+  async listAdmin() {
     return this.models.listProviders();
   }
 
@@ -32,7 +41,8 @@ export class ModelsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard("jwt"))
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles("admin")
   async create(@Body() body: CreateModelDto) {
     const created = await this.models.createModel(body);
     if (created?.id) this.modelResolver.clear(created.id);
@@ -40,7 +50,8 @@ export class ModelsController {
   }
 
   @Put(":id")
-  @UseGuards(AuthGuard("jwt"))
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles("admin")
   async updateModel(@Param("id") id: string, @Body() body: UpdateModelDto) {
     const updated = await this.models.updateModel(id, body);
     this.modelResolver.clear(id);
@@ -48,7 +59,8 @@ export class ModelsController {
   }
 
   @Delete(":id")
-  @UseGuards(AuthGuard("jwt"))
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles("admin")
   async deleteModel(@Param("id") id: string) {
     const r = await this.models.deleteModel(id);
     this.modelResolver.clear(id);

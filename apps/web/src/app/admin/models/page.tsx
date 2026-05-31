@@ -20,12 +20,19 @@ export default function ModelsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [error, setError] = useState('');
 
   async function load() {
     const token = localStorage.getItem('token');
     if (!token) return;
-    const res = await fetch(`${API_BASE}/models`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${API_BASE}/models/admin`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      setError(res.status === 403 ? '无权限访问模型管理' : '模型列表加载失败');
+      setModels([]);
+      return;
+    }
     const data = await res.json();
+    setError('');
     setModels(data.models ?? []);
   }
 
@@ -115,6 +122,11 @@ export default function ModelsPage() {
       </div>
 
       <div className="w-full">
+        {error && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">

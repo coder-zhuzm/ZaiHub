@@ -62,19 +62,23 @@ export class AiController {
 
     const startedAt = Date.now();
     let runId: string | undefined;
+    let conversationId = body?.conversationId;
 
     try {
       this.sseWriter.open(res);
 
       const providerMessages = this.messageMapper.toProviderMessages(messages);
       const userContent = this.messageMapper.getLastUserContent(providerMessages);
+      const clientMessageId = this.messageMapper.getLastUserMessageId(messages);
       const runContext = await this.chatRuns.start({
         userId,
         modelDbId: body?.modelId,
         conversationId: body?.conversationId,
+        clientMessageId,
         userContent,
       });
       runId = runContext?.run.id;
+      conversationId = runContext?.conversation.id ?? conversationId;
 
       const model = await this.modelResolver.resolve(body?.modelId);
       const provider = this.providerFactory.create(model);
@@ -111,7 +115,7 @@ export class AiController {
       const elapsedMs = Date.now() - startedAt;
       await this.chatRuns.fail({
         runId,
-        conversationId: body?.conversationId,
+        conversationId,
         errorMessage: message,
         elapsedMs,
       });

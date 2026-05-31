@@ -22,4 +22,9 @@ export class MessageMapper {
   getLastUserContent(messages: ProviderMessage[]) {
     return [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
   }
+
+  getLastUserMessageId(messages: any[]) {
+    const id = [...messages].reverse().find((message) => message?.role === "user")?.id;
+    return typeof id === "string" && id.trim() ? id : undefined;
+  }
 }
