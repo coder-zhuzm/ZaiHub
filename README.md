@@ -1,5 +1,3 @@
-# ZaiHub
-
 <div align="center">
 
 # ZaiHub
@@ -14,243 +12,339 @@
 
 </div>
 
-## ✨ 特性
+ZaiHub 是一个面向开发者的多模型 AI 对比工作台。它支持在同一会话中并行请求 1-3 个模型，实时对比回答，并将会话、消息和每次模型调用结果持久化。
 
-### 🚀 核心功能
-- **多窗口并行对话** - 同时与多个AI模型对话，支持1-3个窗口动态布局
-- **智能模型管理** - 支持添加、编辑、删除多种AI模型配置
-- **实时流式响应** - 基于SSE的流式输出，实时显示AI回复
-- **Markdown渲染** - 完整的Markdown支持，包括代码高亮、表格、GFM特性
-- **JWT认证** - 安全的用户认证和授权机制
+当前版本已经覆盖聊天工作台的基础闭环：认证、模型配置、SSE 流式响应、会话历史、模型密钥加密存储和管理员权限。评测集、成本统计和回答评分仍在规划中。
 
-### 🎨 用户体验
-- **响应式设计** - 适配不同屏幕尺寸，移动端友好
-- **优雅的UI** - 基于shadcn/ui的现代化界面设计
-- **智能重试** - 单个窗口失败时可独立重试
-- **状态指示** - 清晰的加载、成功、错误状态展示
+## 功能概览
 
-### 🛠 技术特性
-- **TypeScript** - 全栈TypeScript支持，类型安全
-- **Monorepo架构** - 使用Turbo进行项目管理
-- **数据库集成** - Prisma ORM + SQLite/PostgreSQL
-- **模块化设计** - 清晰的代码组织和架构
+### 多模型聊天
 
-## 🏗️ 技术栈
+- 支持 1-3 个聊天窗口并行请求不同模型。
+- 每个窗口独立展示加载、流式输出、成功和失败状态。
+- 单个模型失败不会阻塞其他窗口。
+- 失败窗口支持独立重试，并复用当前会话。
+- Markdown、GFM 表格和代码高亮渲染。
 
-### 前端 (apps/web)
-- **框架**: Next.js 16 + React 19
-- **UI库**: shadcn/ui + Tailwind CSS
-- **AI集成**: Vercel AI SDK v5
-- **Markdown**: react-markdown + remark-gfm + rehype-highlight
-- **状态管理**: React Hooks + Context
+### 会话历史
 
-### 后端 (apps/api)
-- **框架**: NestJS 11
-- **认证**: JWT + Passport
-- **AI集成**: OpenAI SDK
-- **数据库**: Prisma ORM
-- **API**: RESTful + SSE
+- 新建、切换、删除和重命名会话。
+- 首条问题自动生成会话标题。
+- 历史列表使用 cursor 分页，默认每页 20 条。
+- 会话侧边栏支持收起和展开。
+- 同一轮问题发送给多个模型时，用户消息只保存一次。
 
-### 数据层 (packages/database)
-- **ORM**: Prisma
-- **数据库**: SQLite (开发) / PostgreSQL (生产)
-- **迁移**: 版本化数据库schema管理
+### 模型管理与安全
 
-## 📁 项目结构
+- 管理员可以新增、编辑和删除模型配置。
+- 普通用户只能读取启用模型的安全摘要。
+- 模型 API Key 使用 AES-256-GCM 加密存储。
+- 管理接口仅返回 masked key。
+- 编辑模型时 API Key 留空表示不修改。
+- 用户角色以数据库为准，后端每次鉴权都会读取当前角色。
 
+### 服务保护
+
+- JWT + Passport 鉴权。
+- 单用户最多 3 个并发 AI 请求。
+- 单用户每分钟最多 30 个 AI 请求。
+- 上游模型请求默认 20 秒超时。
+
+## 技术栈
+
+| 层级 | 技术 |
+| --- | --- |
+| Web | Next.js 16、React 19、Tailwind CSS、Radix UI、lucide-react |
+| API | NestJS 11、Passport JWT、OpenAI SDK |
+| Database | PostgreSQL、Prisma |
+| Monorepo | pnpm workspace、Turbo |
+
+Provider 层当前通过 OpenAI-compatible SDK 请求模型，因此可以接入支持兼容接口的服务。不同厂商的专用适配器仍在规划中。
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    Browser["Next.js Web"] -->|"REST + SSE"| API["NestJS API"]
+    API --> Auth["JWT / RBAC"]
+    API --> Chat["AI Chat Pipeline"]
+    API --> Conversations["Conversation API"]
+    API --> Models["Model Admin API"]
+    Chat --> Mapper["MessageMapper"]
+    Chat --> Resolver["ModelResolver"]
+    Chat --> Factory["ProviderFactory"]
+    Chat --> Writer["SseWriter"]
+    Chat --> Runs["ChatRunService"]
+    Resolver --> Crypto["ApiKeyCryptoService"]
+    Factory --> Provider["OpenAI-compatible Provider"]
+    Conversations --> DB[("PostgreSQL")]
+    Models --> DB
+    Runs --> DB
 ```
+
+### 后端模块
+
+| 模块 | 职责 |
+| --- | --- |
+| `auth` | 注册、登录、JWT 校验、实时角色读取、RBAC |
+| `ai` | 流式聊天编排、模型解析、Provider 创建、SSE 输出、调用记录 |
+| `conversations` | 会话列表、分页、详情、创建、重命名、删除 |
+| `models` | 模型摘要读取、管理员配置管理、密钥脱敏 |
+| `prisma` | Prisma Client 生命周期与数据库连接 |
+
+### 前端模块
+
+| 模块 | 职责 |
+| --- | --- |
+| `useChatSessions` | 多窗口状态、消息列表、历史回放 |
+| `useChatStream` | SSE 消费、流式增量、失败处理 |
+| `useConversations` | 会话刷新、分页加载、切换、删除、重命名 |
+| `chat-api.ts` | 模型摘要和聊天流请求 |
+| `conversation-api.ts` | 会话 REST API |
+
+## 数据模型
+
+```mermaid
+erDiagram
+    User ||--o{ Conversation : owns
+    Conversation ||--o{ Message : contains
+    Conversation ||--o{ ChatRun : records
+    ChatRun }o--|| Message : "uses user message"
+    ChatRun }o--o| Message : "produces assistant message"
+```
+
+| 模型 | 说明 |
+| --- | --- |
+| `User` | 用户账号、角色、偏好模型 |
+| `Model` | 模型标识、平台、Base URL、加密 API Key、启用状态 |
+| `Conversation` | 用户会话、标题、更新时间 |
+| `Message` | 用户或模型消息；`clientMessageId` 用于避免多模型并发重复保存问题 |
+| `ChatRun` | 单次模型调用状态、耗时和错误信息 |
+
+`Chat` 是早期兼容模型，新聊天链路使用 `Conversation / Message / ChatRun`。
+
+## 项目结构
+
+```text
 ZaiHub/
 ├── apps/
-│   ├── web/                 # Next.js 前端应用
-│   │   ├── src/
-│   │   │   ├── app/         # App Router
-│   │   │   ├── components/  # React组件
-│   │   │   └── lib/         # 工具函数
-│   │   └── package.json
-│   └── api/                 # NestJS 后端API
-│       ├── src/
-│       │   ├── ai/          # AI相关模块
-│       │   ├── auth/        # 认证模块
-│       │   ├── models/      # 模型管理模块
-│       │   └── prisma/      # 数据库服务
-│       └── package.json
+│   ├── api/src/
+│   │   ├── ai/
+│   │   ├── auth/
+│   │   ├── conversations/
+│   │   ├── models/
+│   │   └── prisma/
+│   └── web/src/
+│       ├── app/
+│       ├── components/
+│       ├── hooks/
+│       └── lib/
 ├── packages/
-│   └── database/            # 共享数据库包
-├── turbo.json               # Turbo配置
-├── pnpm-workspace.yaml      # PNPM工作空间配置
-└── README.md
+│   └── database/
+│       └── prisma/schema.prisma
+├── .env.example
+├── pnpm-workspace.yaml
+└── turbo.json
 ```
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
+
 - Node.js 20+
 - pnpm 10+
-- Git
+- PostgreSQL
 
 ### 安装依赖
-```bash
-# 克隆项目
-git clone https://github.com/your-username/ZaiHub.git
-cd ZaiHub
 
-# 安装依赖
+```bash
+git clone https://github.com/coder-zhuzm/ZaiHub.git
+cd ZaiHub
 pnpm install
 ```
 
-### 环境配置
+### 配置环境变量
 
-#### 后端环境变量 (apps/api/.env)
-```env
-# JWT配置
-JWT_SECRET=your-super-secret-jwt-key
+复制根目录示例文件：
 
-# OpenAI配置 (可选)
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# 数据库
-DATABASE_URL="file:./dev.db"
-```
-
-#### 前端环境变量 (apps/web/.env.local)
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 数据库初始化
 ```bash
-# 推送数据库schema
-pnpm db:push
+cp .env.example .env
 ```
 
-### 启动应用
+根目录 `.env`：
 
-#### 方式一：统一启动 (推荐)
+```env
+DATABASE_URL="postgresql://username:password@host:port/dbname?schema=public"
+JWT_SECRET=replace-with-a-stable-random-secret
+MODEL_KEY_ENCRYPTION_SECRET=replace-with-a-stable-random-secret
+
+# 可选：默认模型配置
+IFLOW_BASE_URL=https://apis.iflow.cn/v1
+IFLOW_API_KEY=
+
+# 可选：模型请求限制
+AI_REQUEST_TIMEOUT_MS=20000
+AI_MAX_TOKENS=4096
+
+# 可选：Next.js rewrite 的 API 地址
+API_ORIGIN=http://localhost:8000
+```
+
+`MODEL_KEY_ENCRYPTION_SECRET` 必须长期保持稳定。更换该值前，需要先完成模型 API Key 的重新加密迁移，否则历史密文将无法解密。
+
+前端默认通过 `/api` rewrite 请求后端。如果希望前端直连 API，可创建 `apps/web/.env.local`：
+
+```env
+NEXT_PUBLIC_API_ORIGIN=http://localhost:8000
+```
+
+### 初始化数据库
+
 ```bash
-# 同时启动前后端
+pnpm -C packages/database generate
+pnpm -C packages/database db:push
+```
+
+### 启动开发环境
+
+统一启动：
+
+```bash
 pnpm dev
 ```
 
-#### 方式二：分别启动
-```bash
-# 启动后端 (端口8000)
-pnpm -C apps/api dev
+分别启动：
 
-# 启动前端 (端口3000)
+```bash
+pnpm -C apps/api dev
 pnpm -C apps/web dev
 ```
 
-### 访问应用
-- 前端应用: http://localhost:3000
-- 后端API: http://localhost:8000
-- 管理界面: http://localhost:3000/admin/models
+访问地址：
 
-## 📖 使用指南
+- Web: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:8000](http://localhost:8000)
+- 模型管理: [http://localhost:3000/admin/models](http://localhost:3000/admin/models)
 
-### 1. 添加AI模型
-1. 访问 `/admin/models` 管理页面
-2. 点击"新增模型"按钮
-3. 填写模型信息：
-   - 名称: 模型显示名称
-   - 平台: iflow/openai
-   - Base URL: API端点
-   - API Key: 认证密钥 (可选)
+## 管理员与模型配置
 
-### 2. 开始对话
-1. 在主界面选择窗口数量 (1-3个)
-2. 为每个窗口选择AI模型
-3. 在输入框中输入消息
-4. 点击发送，所有窗口会并行响应
+新注册用户默认角色为 `user`。模型配置管理仅允许 `admin` 角色访问。
 
-### 3. 高级功能
-- **重试**: 点击失败窗口的重试按钮
-- **模型切换**: 点击窗口标题快速切换模型
-- **Markdown**: 支持完整的Markdown语法渲染
+当前项目尚未提供管理员管理页面。首次部署时，需要通过数据库管理工具将指定用户的 `role` 更新为 `admin`。角色更新后刷新页面即可生效，不需要重新登录。
 
-## 🔧 开发指南
+管理员模型配置字段：
 
-### 常用脚本
-```bash
-# 开发
-pnpm dev                    # 启动开发服务器
-pnpm -C apps/web dev        # 仅启动前端
-pnpm -C apps/api dev        # 仅启动后端
+| 字段 | 说明 |
+| --- | --- |
+| `modelId` | 上游接口使用的真实模型标识 |
+| `name` | 前端展示名称 |
+| `platform` | 平台标识，例如 `iflow` 或 `openai` |
+| `baseURL` | OpenAI-compatible API 地址 |
+| `apiKey` | 上游密钥；创建时写入，编辑时留空表示不修改 |
+| `enabled` | 是否对普通用户开放 |
 
-# 构建
-pnpm build                  # 构建所有应用
-pnpm -C apps/web build      # 构建前端
-pnpm -C apps/api build      # 构建后端
+## SSE 协议
 
-# 数据库
-pnpm db:push               # 推送schema
-pnpm -C packages/database db:push  # 数据库操作
+聊天接口：`POST /ai/chat`
 
-# 代码检查
-pnpm -C apps/web lint       # 前端代码检查
+服务端统一输出以下事件：
+
+| 事件 | 说明 |
+| --- | --- |
+| `start` | 模型流已建立，包含 `runId`、`modelId`、`conversationId` |
+| `delta` | 增量文本内容 |
+| `error` | 模型请求失败或超时 |
+| `done` | 请求结束，包含 `elapsedMs` |
+
+示例：
+
+```text
+data: {"type":"start","runId":"...","conversationId":"..."}
+
+data: {"type":"delta","content":"你好"}
+
+data: {"type":"done","elapsedMs":842}
 ```
 
-### 添加新功能
-1. **前端组件**: 在 `apps/web/src/components/` 添加
-2. **API端点**: 在 `apps/api/src/` 添加模块
-3. **数据库**: 在 `packages/database/prisma/` 修改schema
+## API 摘要
 
-### 代码规范
-- 使用TypeScript严格模式
-- 遵循ESLint规则
-- 组件使用函数式写法
-- API使用装饰器模式
+### 认证
 
-## 🎯 核心功能详解
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/auth/register` | 注册 |
+| `POST` | `/auth/login` | 登录 |
+| `GET` | `/users/me` | 当前用户与实时角色 |
 
-### 多窗口聊天系统
-- **动态布局**: 根据窗口数量自动调整布局 (1列/2列/3列)
-- **独立状态**: 每个窗口独立的对话历史和状态
-- **并行处理**: 同时向多个模型发送请求
-- **错误隔离**: 单个窗口失败不影响其他窗口
+### 模型
 
-### Markdown渲染引擎
-- **完整支持**: 标题、列表、表格、代码块、引用等
-- **语法高亮**: 基于highlight.js的代码高亮
-- **GFM特性**: GitHub Flavored Markdown支持
-- **流式优化**: 专为AI流式输出优化
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| `GET` | `/models` | 登录用户 | 启用模型的安全摘要 |
+| `GET` | `/models/admin` | 管理员 | 模型配置列表，API Key 已脱敏 |
+| `POST` | `/models` | 管理员 | 新增模型 |
+| `PUT` | `/models/:id` | 管理员 | 更新模型 |
+| `DELETE` | `/models/:id` | 管理员 | 删除模型 |
 
-### 模型管理系统
-- **CRUD操作**: 完整的模型增删改查
-- **配置灵活**: 支持多种AI平台和自定义端点
-- **安全存储**: API密钥安全存储和传输
-- **即时切换**: 运行时动态切换AI模型
+### 会话
 
-## 🤝 贡献指南
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/conversations?limit=20&cursor=...` | 分页查询会话 |
+| `GET` | `/conversations/:id` | 查询会话消息与调用记录 |
+| `POST` | `/conversations` | 新建会话 |
+| `PATCH` | `/conversations/:id` | 重命名会话 |
+| `DELETE` | `/conversations/:id` | 删除会话 |
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+## 常用命令
 
-### 开发规范
-- 遵循现有代码风格
-- 添加适当的测试
-- 更新相关文档
-- 确保CI/CD通过
+```bash
+# 开发
+pnpm dev
+pnpm -C apps/api dev
+pnpm -C apps/web dev
 
-## 📄 许可证
+# 构建
+pnpm build
+pnpm -C apps/api build
+pnpm -C apps/web build
+pnpm -C packages/database build
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+# 检查
+pnpm -C apps/web lint
 
-## 🙏 致谢
-- [心流 iFolow](https://iflow.cn/) - AI模型服务
-- [Vercel AI SDK](https://sdk.vercel.ai/) - AI集成框架
-- [Next.js](https://nextjs.org/) - React框架
-- [NestJS](https://nestjs.com/) - Node.js框架
-- [shadcn/ui](https://ui.shadcn.com/) - UI组件库
-- [Tailwind CSS](https://tailwindcss.com/) - CSS框架
-- [Prisma](https://www.prisma.io/) - ORM
-- [highlight.js](https://highlightjs.org/) - 代码高亮库
-- [GitHub](https://github.com/) - 开源社区
+# Prisma
+pnpm -C packages/database generate
+pnpm -C packages/database db:push
+pnpm -C packages/database db:pull
+```
 
+## 安全说明
 
-<div align="center">
+- 不要提交 `.env`、`apps/api/.env` 或 `apps/web/.env.local`。
+- 生产环境必须使用稳定且随机的 `JWT_SECRET` 和 `MODEL_KEY_ENCRYPTION_SECRET`。
+- 模型 API Key 只应通过管理员接口写入，接口响应中只返回 masked key。
+- 普通用户不应看到模型管理入口；后端 RBAC 仍是最终安全边界。
+- 数据库连接串可能包含密码，不要打印到日志或提交到仓库。
 
-**⭐ 如果这个项目对你有帮助，请给它一个星标！**
+## 已知限制
+
+- 尚未支持主动停止生成。
+- SSE `done` 已返回耗时，但页面尚未展示 run 指标。
+- 尚未采集 token usage 和成本。
+- Provider 当前统一走 OpenAI-compatible SDK，尚未拆分厂商专用适配器。
+- 尚未提供评测集、批量运行、评分、备注和最佳答案选择。
+- 自动化测试覆盖仍需补齐。
+
+## 路线图
+
+1. 增加停止生成和 run 指标展示。
+2. 补充会话、并发、分页、RBAC 和密钥安全自动化测试。
+3. 记录 token usage、成本、成功率、平均耗时和 P95。
+4. 增加回答评分、备注和最佳答案选择。
+5. 增加评测集和多模型批量对比。
+6. 将 Provider 层拆为厂商适配器。
+
+## License
+
+本项目使用 [MIT License](LICENSE)。
